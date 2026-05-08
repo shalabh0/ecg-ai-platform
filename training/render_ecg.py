@@ -256,15 +256,6 @@ def render_dataset(ptbxl_dir: str, output_base: str,
     df = pd.read_csv(csv_path, index_col="ecg_id")
     df["scp_codes"] = df["scp_codes"].apply(ast.literal_eval)   # safe Python repr parse
 
-    # Signal quality filter (PTB-XL quality fields: 0=good, 1=noisy, 2=very noisy)
-    if "baseline_drift" in df.columns and "static_noise" in df.columns:
-     before = len(df)
-     df["baseline_drift"] = pd.to_numeric(df["baseline_drift"], errors="coerce")
-     df["static_noise"]   = pd.to_numeric(df["static_noise"],   errors="coerce")
-     df = df.dropna(subset=["baseline_drift", "static_noise"])
-     df = df[(df["baseline_drift"] <= 1) & (df["static_noise"] <= 1)]
-     print(f"[quality] Dropped {before - len(df)} low-quality records. {len(df)} remain.")
-
     def _label(scp: dict) -> str:
         return "normal" if scp.get("NORM", 0) >= 50.0 else "abnormal"
 
