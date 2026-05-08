@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ecg-ai-platform
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: WORKERS
+        value: 1
+      - key: ORT_THREADS
+        value: 2
+      - key: MODELS_DIR
+        value: /home/ecgapp/app/models
+    healthCheckPath: /health
