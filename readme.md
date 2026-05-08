@@ -1,192 +1,26 @@
-# Mobile ECG AI Platform
+# Mobile ECG AI
 
-End-to-end FastAPI service for mobile-captured ECG image analysis.
+![Status](https://img.shields.io/badge/status-WIP-orange)
 
-```
-Mobile ECG Image
-      ↓
-Validation          — structural checks (size, channels, blank, NaN)
-      ↓
-Quality Assessment  — blur, SNR, contrast, baseline wander
-      ↓
-Perspective Correction — deskew / 4-point warp for camera photos
-      ↓
-Preprocessing       — CLAHE, bilateral filter, letterbox resize, normalise
-      ↓
-CNN Inference       — ONNX / PyTorch / TFLite / mock backend
-      ↓
-Clinical Assistance Output — per-class textual guidance (NOT a diagnosis)
-      ↓
-API Response        — JSON with stages, quality, probabilities, clinical note
-```
+Production-oriented Mobile ECG AI Clinical Assistance Platform.
+
+The system processes mobile-captured ECG sheet images, validates image quality, applies preprocessing, and performs CNN-based ECG interpretation.
 
 ---
 
-## Project structure
+## Pipeline
 
-```
-mobile-ecg-ai-platform/
-├── app/
-│   ├── main.py                 # FastAPI app factory + lifespan
-│   ├── api/
-│   │   └── routes.py           # /analyze, /analyze/batch, /classes
-│   ├── processing/
-│   │   ├── validation.py       # Stage 1
-│   │   ├── quality.py          # Stage 2
-│   │   ├── perspective.py      # Stage 3
-│   │   └── preprocessing.py    # Stage 4
-│   ├── inference/
-│   │   ├── classifier.py       # Stage 5 + 6
-│   │   └── model_loader.py     # ONNX / PyTorch / TFLite / mock
-│   ├── utils/
-│   │   └── image_utils.py
-│   └── schemas/
-│       └── response.py
-├── datasets/                   # Training data (not committed)
-├── models/                     # Model weights (not committed)
-├── tests/
-│   └── test_pipeline.py
-├── requirements.txt
-├── Dockerfile
-└── README.md
-```
-
----
-
-## Quick start
-
-### 1. Install dependencies
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2. Add your model (optional)
-
-Place any of the following in `models/`:
-
-| File | Backend |
-|------|---------|
-| `ecg_model.onnx` | ONNX Runtime (auto-detected first) |
-| `ecg_model.pt` | PyTorch `torch.save` |
-| `ecg_model.tflite` | TFLite |
-
-If no model file is found the service runs with the **mock backend** (random logits — for development only).
-
-### 3. Run the server
-
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-Interactive docs: http://localhost:8000/docs
-
-### 4. Run with Docker
-
-```bash
-docker build -t ecg-ai-platform .
-docker run -p 8000:8000 \
-  -v $(pwd)/models:/home/ecgapp/app/models \
-  ecg-ai-platform
-```
-
----
-
-## API
-
-### `POST /api/v1/analyze`
-
-Upload a JPEG / PNG / TIFF ECG image.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `file` | `UploadFile` | ECG image (≤ 20 MB) |
-| `return_debug_image` | `bool` | Include base64 corrected image in response |
-
-**Response** `ECGAnalysisResponse`
-
-```json
-{
-  "pipeline_stages": [...],
-  "quality_report": { "score": 0.82, "acceptable": true, ... },
-  "top_class": "Normal Sinus Rhythm",
-  "confidence": 0.941,
-  "class_probabilities": { "Normal Sinus Rhythm": 0.941, ... },
-  "clinical_summary": "[AI-Assisted Clinical Note — NOT a diagnosis]\n...",
-  "corrected_image_b64": null
-}
-```
-
-### `POST /api/v1/analyze/batch`
-
-Upload up to 10 images; returns a list of `ECGAnalysisResponse`.
-
-### `GET /api/v1/classes`
-
-Returns the list of 20 supported ECG rhythm / finding classes.
-
-### `GET /health`
-
-Liveness probe — returns `{"status": "ok"}`.
-
----
-
-## Supported ECG classes (20)
-
-| # | Class |
-|---|-------|
-| 0 | Normal Sinus Rhythm |
-| 1 | Sinus Bradycardia |
-| 2 | Sinus Tachycardia |
-| 3 | Atrial Fibrillation |
-| 4 | Atrial Flutter |
-| 5 | Supraventricular Tachycardia (SVT) |
-| 6 | Premature Atrial Contractions (PAC) |
-| 7 | Premature Ventricular Contractions (PVC) |
-| 8 | Left Bundle Branch Block (LBBB) |
-| 9 | Right Bundle Branch Block (RBBB) |
-| 10 | First-Degree AV Block |
-| 11 | Second-Degree AV Block (Mobitz I) |
-| 12 | Second-Degree AV Block (Mobitz II) |
-| 13 | Third-Degree (Complete) AV Block |
-| 14 | ST Elevation (STEMI pattern) |
-| 15 | ST Depression |
-| 16 | T-Wave Inversion |
-| 17 | Long QT Syndrome |
-| 18 | Ventricular Tachycardia |
-| 19 | Ventricular Fibrillation |
-
----
-
-## Configuration (environment variables)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MODEL_BACKEND` | auto | Force backend: `onnx` / `pytorch` / `tflite` / `mock` |
-| `MODELS_DIR` | `models` | Path to model weight files |
-| `ONNX_MODEL_FILENAME` | `ecg_model.onnx` | ONNX model filename |
-| `PYTORCH_MODEL_FILENAME` | `ecg_model.pt` | PyTorch model filename |
-| `TFLITE_MODEL_FILENAME` | `ecg_model.tflite` | TFLite model filename |
-| `NUM_CLASSES` | `20` | Number of output classes |
-| `ORT_THREADS` | `4` | ONNX Runtime intra-op thread count |
-| `PORT` | `8000` | Server port (Docker) |
-| `WORKERS` | `2` | Uvicorn worker count (Docker) |
-
----
-
-## Run tests
-
-```bash
-pytest tests/ -v
-```
-
----
-
-## ⚠️ Clinical disclaimer
-
-> This platform is a **research and decision-support tool only**.  
-> All outputs are generated by an AI model and **must be reviewed by a qualified clinician** before any patient-management decision.  
-> The system does **not** constitute a medical device and is **not** FDA / CE cleared.
+```text
+Mobile ECG Photo
+        ↓
+Validation
+        ↓
+Quality Assessment
+        ↓
+Perspective Correction
+        ↓
+Preprocessing
+        ↓
+CNN ECG Classification
+        ↓
+Clinical Assistance Output

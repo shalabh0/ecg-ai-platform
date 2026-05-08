@@ -1,0 +1,13 @@
+wfdb
+matplotlib
+numpy
+pandas
+torch
+torchvision
+timm
+albumentations
+onnx
+onnxruntime
+scikit-learn
+tqdm
+opencv-python-headless

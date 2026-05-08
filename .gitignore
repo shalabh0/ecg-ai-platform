@@ -1,9 +1,11 @@
-datasets/
-models/
-*.pth
-*.onnx
+venv/
 __pycache__/
 *.pyc
-venv/
-.env
+
+datasets/
+models/
+
 .ipynb_checkpoints/
+
+*.pth
+*.onnx
