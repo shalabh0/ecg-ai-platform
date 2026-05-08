@@ -26,9 +26,9 @@ IMG_SIZE   = 224          # MobileNetV3 input
 BATCH_SIZE = 8            # small dataset → small batch
 EPOCHS     = 40
 LR         = 1e-3
-LR_HEAD    = 1e-3         # classifier head
-LR_BODY    = 1e-5         # unfrozen backbone layers
-PATIENCE   = 8            # early stopping
+LR_HEAD    = 3e-4         # classifier head
+LR_BODY    = 3e-5         # unfrozen backbone layers
+PATIENCE   = 12            # early stopping
 SEED       = 42
 
 CLASSES    = ["abnormal", "normal"]   # torchvision sorts alphabetically
@@ -102,37 +102,26 @@ def split_dataset(data_dir: str, val_frac: float = 0.2, seed: int = SEED):
 # ─── Model ────────────────────────────────────────────────────────────────────
 
 def build_model(num_classes: int = 2) -> nn.Module:
-    """
-    MobileNetV3-Small pretrained on ImageNet.
-    Strategy:
-      - Freeze entire backbone
-      - Replace classifier head (Linear → Dropout → Linear)
-      - Unfreeze last 2 InvertedResidual blocks for fine-tuning
-    """
     model = models.mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
 
-    # Freeze all
-    for p in model.parameters():
-        p.requires_grad = False
-
-    # Unfreeze last 2 blocks of features (blocks 10 and 11)
-    for block in list(model.features.children())[-2:]:
+    # Freeze only first half of backbone
+    children = list(model.features.children())
+    for block in children[:len(children)//2]:
         for p in block.parameters():
-            p.requires_grad = True
+            p.requires_grad = False
 
-    # Replace classifier head
-    in_features = model.classifier[0].in_features   # 576
+    # Everything else (last half + classifier) stays trainable
+    in_features = model.classifier[0].in_features
     model.classifier = nn.Sequential(
-        nn.Linear(in_features, 256),
+        nn.Linear(in_features, 128),
         nn.Hardswish(),
-        nn.Dropout(p=0.4),
-        nn.Linear(256, num_classes),
+        nn.Dropout(p=0.5),
+        nn.Linear(128, num_classes),
     )
 
-    total  = sum(p.numel() for p in model.parameters())
+    total     = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"[model] Total params: {total:,}  Trainable: {trainable:,} "
-          f"({100*trainable/total:.1f}%)")
+    print(f"[model] Total params: {total:,}  Trainable: {trainable:,} ({100*trainable/total:.1f}%)")
     return model
 
 
@@ -239,11 +228,10 @@ def train(model, train_loader, val_loader, output_dir: Path, epochs: int = EPOCH
 # ─── ONNX export ──────────────────────────────────────────────────────────────
 
 def export_onnx(model, output_dir: Path):
-    """Export best checkpoint to ONNX for FastAPI inference."""
     ckpt_path = output_dir / "ecg_classifier.pt"
     onnx_path = output_dir / "ecg_classifier.onnx"
 
-    ckpt = torch.load(ckpt_path, map_location="cpu")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
     model.load_state_dict(ckpt["model_state"])
     model.eval().cpu()
 
@@ -254,6 +242,7 @@ def export_onnx(model, output_dir: Path):
         output_names=["logits"],
         dynamic_axes={"input": {0: "batch"}, "logits": {0: "batch"}},
         opset_version=17,
+        dynamo=False,      # ← legacy TorchScript path, no onnxscript needed
     )
     print(f"[onnx] Exported → {onnx_path}")
     return onnx_path
